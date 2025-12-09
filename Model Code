@@ -1,1 +1,64 @@
 
+!pip install scikit-learn joblib
+
+from google.colab import files
+uploaded = files.upload()
+
+import pandas as pd
+import numpy as np
+import math
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, accuracy_score
+import joblib
+
+df = pd.read_csv("mouse_raw_data.csv")
+df.columns = ['event_type', 'timestamp', 'x', 'y', 'is_click', 'mood']
+df = df.sort_values(by='timestamp').reset_index(drop=True)
+
+features = []
+labels = []
+prev = None
+
+for i, row in df.iterrows():
+    if prev is None:
+        prev = row
+        continue
+    if row['mood'] != prev['mood']:
+        prev = row
+        continue
+    dt = row['timestamp'] - prev['timestamp']
+    if dt <= 0:
+        prev = row
+        continue
+    dx = row['x'] - prev['x']
+    dy = row['y'] - prev['y']
+    dist = math.sqrt(dx*dx + dy*dy)
+    speed = dist / dt
+    features.append([dt, dist, speed, row['is_click']])
+    labels.append(row['mood'])
+    prev = row
+
+features = np.array(features)
+labels = np.array(labels)
+
+label_encoder = LabelEncoder()
+y = label_encoder.fit_transform(labels)
+X = features
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model = RandomForestClassifier(n_estimators=200, random_state=42)
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print(classification_report(y_test, y_pred, target_names=label_encoder.classes_))
+
+joblib.dump(model, "mouse_mood_model.sav")
+joblib.dump(label_encoder, "mouse_mood_label_encoder.sav")
+
+files.download("mouse_mood_model.sav")
+files.download("mouse_mood_label_encoder.sav")
